@@ -1,0 +1,33 @@
+imaqreset;   % Reset the camera
+cam = webcam;
+refImage = snapshot(hcamera);
+grayRef = rgb2gray(refImage);  % Convert reference image to grayscale
+
+freq = 2500;             % Alarm tone frequency (Hz)
+dur = 2.5;               % Duration of the alarm sound (seconds)
+sampRate = 24000;       % Sampling rate for sound
+t = linspace(0, dur, dur * sampRate);   % Time vector for the duration
+y = sin(2 * pi * freq * t) .* (mod(floor(t * 4), 2));  % pulsed alarm sound
+figure('Name','Intruder Detection');
+
+frames = 100;  % Number of frames to process
+for i = 1:frames
+    currentFrame = snapshot(cam);
+    grayFrame = rgb2gray(currentFrame); 
+    imDifference = imabsdiff(grayRef, grayFrame);
+    thresholdI = imDifference > 90;
+    imshow(thresholdI);
+    drawnow;
+    stats = regionprops(thresholdI, "MajorAxisLength"); 
+    sizes = [stats.MajorAxisLength];
+    maxSize = max(sizes);  
+    
+    if maxSize > 300
+        disp('Warning: Somebody detected!');
+        sound(y, sampRate);
+    else
+        disp('OK: No intruder.');
+    end
+    pause(0.5);  % Pause to control frame processing rate
+end
+clear cam;
