@@ -1,4 +1,4 @@
-imaqreset;   % Reset the camera
+imaqreset;  
 cam = webcam;
 refImage = snapshot(hcamera);
 grayRef = rgb2gray(refImage);  % Convert reference image to grayscale
