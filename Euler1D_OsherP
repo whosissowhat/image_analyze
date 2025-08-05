@@ -1,7 +1,6 @@
 function [rho,u,p,e,t]=Euler1D_OsherP(example)
 
 clc;
-% print
 fprintf(['Numerical solution of Euler equations in 1D\n'...
          'Osher P-ordering flux \n',...
          'example : %2d\n'],example);
