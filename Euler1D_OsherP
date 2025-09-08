@@ -1,0 +1,144 @@
+function [rho,u,p,e,t]=Euler1D_OsherP(example)
+
+clc;
+fprintf(['Numerical solution of Euler equations in 1D\n'...
+         'Osher P-ordering flux \n',...
+         'example : %2d\n'],example);
+
+priklad=sprintf('%02d',example);     
+% reading data from initial file - files are uploaded
+fid=fopen(['e1godf',priklad,'.ini'],'rt');
+if fid < 0   
+  fprintf('\n');
+  error('file %s does not exist',['e1godf',priklad,'.ini']);
+end
+tline=fgetl(fid); L=sscanf(tline,'%e',1);
+tline=fgetl(fid); DIAPH=sscanf(tline,'%e',1);
+tline=fgetl(fid); CELLS=sscanf(tline,'%d',1);
+tline=fgetl(fid); GAMMA=sscanf(tline,'%e',1);
+tline=fgetl(fid); T=sscanf(tline,'%e',1);
+tline=fgetl(fid); DL=sscanf(tline,'%e',1);
+tline=fgetl(fid); UL=sscanf(tline,'%e',1);
+tline=fgetl(fid); PL=sscanf(tline,'%e',1);
+tline=fgetl(fid); DR=sscanf(tline,'%e',1);
+tline=fgetl(fid); UR=sscanf(tline,'%e',1);
+tline=fgetl(fid); PR=sscanf(tline,'%e',1);
+tline=fgetl(fid); CFL=sscanf(tline,'%e',1);
+tline=fgetl(fid); PSCALE=sscanf(tline,'%e',1);
+fclose(fid);
+fprintf('\n**************************************************\n');
+fprintf('length of interval        : %10.2f\n',L);
+fprintf('number of cells           : %10d\n',CELLS);
+fprintf('time                      : %10.4f\n',T);
+fprintf('position of membrane      : %10.2f\n',DIAPH);
+fprintf('left density              : %10.4f    ',DL);
+fprintf('right density             : %10.4f\n',DR);
+fprintf('left velocity             : %10.2f    ',UL);
+fprintf('right velocity            : %10.2f\n',UR);
+fprintf('left pressure             : %10.2f    ',PL);     
+fprintf('right pressure            : %10.2f\n',PR);
+fprintf('CFL constant              : %10.2f\n',CFL);
+fprintf('Gamma constant            : %10.2f\n',GAMMA);
+
+
+N=CELLS; % number of cells
+h=L/N;% length of control volume (CV)
+% vector of midpoints CVs (fictitious too)
+x = -h/2:h:L+h/2;
+disp(x);
+tn=0; % initial time
+
+w=zeros(3,N+2); % declaration w 
+t=0;  % counter of time steps
+
+% writing of initial conditions
+wL=[DL;DL*UL;PL/(GAMMA-1)+1/2*DL*UL^2]; % column vector of conservative variables, left side of membrane
+wR=[DR;DR*UR;PR/(GAMMA-1)+1/2*DR*UR^2]; % column vector of conservative variables, right side of membrane
+
+for i=1:N+2
+    if x(i)<= DIAPH
+        w(:,i)=wL;
+    else
+        w(:,i)=wR;
+    end
+    % writing of initial state of conservative variables into matrix w 
+    % (in rows are components of vector w=(rho, rho*u,E))
+    % for x<=DIAPH is w=wL, elsewhere w=wR
+end
+
+%----------- main loop - beginning ---------------------
+while abs(T-tn)>10^(-10) 
+      [fluxH,LamMax]=OsherP(w,N,GAMMA); % calculate numerical fluxes
+      tau= CFL*h/LamMax; % calculate new length of time step
+   
+      if tn +tau < T
+          tn = tn + tau;% calculate new time !attention! it is necessary to end in T-> add "if" in fron of this line
+      else
+          tn = T;
+          tau = T-tn;
+          %fprintf('tau            : %10.2f\n    ',tau);
+      end
+      for j = 2:N+1
+        w(:,j) = w(:,j) - tau/h*(fluxH(:,j) - fluxH(:,j-1)); % calculate w_i^(n+1) from numerical scheme
+      end
+      % transmissive B.C
+      w(:,1)= w(:,2);
+      w(:,end)= w(:,N+1);
+    %---
+     t=t+1; % counter of time steps
+     fprintf('LamMax            : %10.2f\n    ',LamMax);
+     fprintf('tau            : %10.2f\n    ',tau);
+     disp(fluxH);
+     disp(w);
+end 
+%----------- main loop - end ---------------------
+
+% calculate primitive variables from w (for plot and output)
+rho= w(1,:); % density
+u= w(2,:)./rho;   % velocity
+p= (GAMMA-1)*(w(3,:)-1/2*rho.*u.^2);  % pressure
+    
+fprintf('number of time steps: %d\n',t)
+
+
+% comparing with Riemann solver:  
+     fprintf('the exact solution of the Euler equations\n'); 
+     Xin={L,DIAPH,1000,GAMMA,T,DL,UL,PL,DR,UR,PR,PSCALE};
+    [XE,~]=e1r(Xin,1);
+
+
+% picture    
+ rx=0.1; rr=0.1; % setting for better plotting
+ xmin=min(x);xmax=max(x); dx=xmax-xmin;
+
+figure(1);
+title(sprintf('1D Euler equations, time = %6.2f, OsherP',T));
+
+subplot(2,2,1);
+dmin=min(rho);dmax=max(rho);
+  plot(XE(1,:),XE(2,:),'b-',x,rho,'.r')
+  dmin=min(dmin,min(XE(2,:))); dmax=max(dmax,max(XE(2,:)));
+  dd=dmax-dmin;
+  axis([xmin-rx*dx,xmax+rx*dx,dmin-rr*dd,dmax+rr*dd]);
+  xlabel(' x');
+  ylabel('density rho');
+
+ subplot(2,2,2);
+ umin=min(u);umax=max(u);
+   plot(XE(1,:),XE(3,:),'b-',x,u,'.r');
+   umin=min(umin,min(XE(3,:))); umax=max(umax,max(XE(3,:)));
+  du=umax-umin;
+  axis([xmin-rx*dx,xmax+rx*dx,umin-rr*du,umax+rr*du]);
+ xlabel(' x');
+ ylabel('velocity u');
+
+ subplot(2,2,3);
+ pmin=min(p);pmax=max(p);
+   plot(XE(1,:),XE(4,:),'b-',x,p,'.r');
+   pmin=min(pmin,min(XE(4,:))); pmax=max(pmax,max(XE(4,:)));
+   pu=pmax-pmin;
+  axis([xmin-rx*dx,xmax+rx*dx,pmin-rr*pu,pmax+rr*pu]);
+ xlabel(' x');
+ ylabel('pressure p');
+end
+
